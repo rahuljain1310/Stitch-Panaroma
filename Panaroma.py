@@ -141,6 +141,10 @@ def blend_2image(img1,img2,mask1,distmat1,H,w,h):
   distmat2 = distance_from_edge(img2,corners,mask2)
   dest_img,dest_mask,dest_distmat = blending(img1,img2,distmat1,distmat2,mask1,mask2)
 
+def laplacing_blending(img1,img2,mask1,H,w,h):
+  corners = get_lines(w,h,H)
+  mask2 = get_mask(img2,corners)
+
 def get_lines(width ,height, H):
   four_points = np.ndarray(1,3)
   four_points[0] = np.array([0,0,1])
