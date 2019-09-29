@@ -34,6 +34,8 @@ if len(matches[:,0]) >= 4:
 else:
   raise AssertionError("Can't find enough keypoints.")
 
+print(img.shape,img_.shape)
+print(img2.shape,img1.shape)
 dst = cv2.warpPerspective(img_,H,(img.shape[1] + img_.shape[1], img.shape[0]))
 plt.subplot(122),plt.imshow(dst),plt.title('Warped Image')
 plt.show()
@@ -42,6 +44,8 @@ dst[0:img.shape[0], 0:img.shape[1]] = img
 cv2.imwrite('output.jpg',dst)
 plt.imshow(dst)
 plt.show()
+
+print(matches.shape)
 
 if __name__ == "__main__":
   ## Read all Images
