@@ -2,16 +2,19 @@ import cv2 as cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
+import os
 
 img_ = cv2.imread('right.jpeg')
-img1 = cv2.cvtColor(img_,cv2.COLOR_BGR2GRAY)
+img1 = cv2.cvtColor(img_, cv2.COLOR_BGR2GRAY)
 img = cv2.imread('left.jpeg')
-img2 = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+img2 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 sift = cv2.xfeatures2d.SIFT_create()
 # find the keypoints and descriptors with SIFT
 kp1, des1 = sift.detectAndCompute(img1,None)
 kp2, des2 = sift.detectAndCompute(img2,None)
+
+print(kp1[0:5],kp1[0:5])
 
 bf = cv2.BFMatcher()
 matches = bf.knnMatch(des1,des2, k=2)
@@ -39,3 +42,8 @@ dst[0:img.shape[0], 0:img.shape[1]] = img
 cv2.imwrite('output.jpg',dst)
 plt.imshow(dst)
 plt.show()
+
+if __name__ == "__main__":
+  ## Read all Images
+  imagelist = [f for f in os.listdir('./1') if f.endswith('.jpg')]
+  print(imagelist)
