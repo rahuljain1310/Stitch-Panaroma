@@ -209,7 +209,8 @@ if __name__ == "__main__":
   ## Compute Feature Martrix and MAtrix of Homographies/ Affines
   ## ===================================================================================================================
   featureMatchMatrix,homographyMatrix = getFeatureMatchAndProjectionMatrix(desList,kpList,mode=mod)
-  # print(featureMatchMatrix,,homographyMatrix)
+  featureMatchMatrixSum = featureMatchMatrix.sum(axis=0)
+  maxCount = featureMatchMatrixSum.max() 
 
   ## ===================================================================================================================
   ## Loop Over Each Image as the Base
@@ -226,7 +227,11 @@ if __name__ == "__main__":
   ## Homography And Affine Projection
   ## ===================================================================================================================
   for Root in range(0,N_Images):
-    print("Taken Image {0} as the Base Image".format(Root))
+    if featureMatchMatrixSum[Root] > 0.25*maxCount:
+      print("\nTaken Image {0} as the Base Image".format(Root))
+    else:
+      print("\nImage {0} Rejected as Base Image".format(Root))
+      continue
 
     ## ============ Lists / Sets Initialization ============== ##
     CoordinatesCombined = getImageCoordinates(imgListCV[Root],mode='2D')
