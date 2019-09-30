@@ -293,10 +293,6 @@ if __name__ == "__main__":
   # ConstructAlphaBlending(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
 
   ## For Blending
-  
-
-
-
   # while len(imgListCV)>1:
   #   N = len(imgListCV)
   #   matchMatrix = np.zeros((N,N))
