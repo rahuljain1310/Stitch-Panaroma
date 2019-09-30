@@ -4,7 +4,12 @@ import matplotlib.pyplot as plt
 from matplotlib import path
 from random import randrange
 import os
-import math
+from math import sqrt
+def get_keypoints(img1,img2):
+  kp1,des1 = sift.detectAndCompute(img1,None)
+  kp2,des2 = sift.detectAndCompute(img2,None)
+  bf = cv2.BFMatcher()
+  matches = bf.knnMatch(des1,des2, k=2)
 def is_inside_image(img,i,j):
   if (i<img.shape[0] and j<img.shape[1]):
     # return img[i][j][0] > 0
@@ -12,66 +17,7 @@ def is_inside_image(img,i,j):
     return (img[i][j][0] > 0 or img[i][j][1] > 0 or img[i][j][2] > 0)
   else:
     return False
-def exposure_balancing(img1,img2):
-  intensity1 = [0,0,0]
-  intensity2 = [0,0,0]
-  int1 = int2 = 0
-  mean_exposure =  [0,0,0]
-  ratio= [[0,0,0],[0,0,0]]
 
-  imghsv = [0,0]
-  imghsv[0] = cv2.cvtColor(img1,cv2.COLOR_BGR2HSV)
-  imghsv[1] = cv2.cvtColor(img2,cv2.COLOR_BGR2HSV)
-  for i in range(img2.shape[0]):
-    for j in range(img2.shape[1]):
-      if (img2[i][j][0] > 0 or img2[i][j][1] > 0 or img2[i][j][2] > 0):
-        if (is_inside_image(img1,i,j)):
-          
-          int1  = imghsv[0][i][j][2]
-          # print(int1)
-          int2  = imghsv[1][i][j][2]
-          # print(int1,int2)
-          meanint = np.uint8((np.uint16(int1)+np.uint16(int2))//2)
-          imghsv[0][i][j][2] = min(255,meanint)
-          imghsv[1][i][j][2] = meanint
-          # print(int2)
-
-  #       for k in range(3):
-  #         if (is_inside_image(img1,i,j)):
-            
-  #           intensity1[k] += img1[i][j][k]
-  #           intensity2[k] += img2[i][j][k]
-  # print(intensity1[0],intensity1[1])
-  # print(intensity2[0],intensity2[1])
-
-  # mean_exposure = math.sqrt(int1*int2)
-  # rt = [0,0]
-  # rt[0] = mean_exposure/int1
-  # rt[1] = mean_exposure/int2
-  # for img,index in zip([img1,img2],[0,1]):
-  #   for i in range(img.shape[0]):
-  #     for j in range(img.shape[1]):
-  #       imghsv[index][i][j][2] = min(int(rt[index]*imghsv[index][i][j][2]),255)
-  
-  img1 = cv2.cvtColor(imghsv[0],cv2.COLOR_HSV2BGR)
-  img2 = cv2.cvtColor(imghsv[1],cv2.COLOR_HSV2BGR)
-  return img1,img2
-      
-  # for k in range(3):
-  #   mean_exposure[k] = math.sqrt(intensity1[k]*intensity2[k])
-  #   # ratio[0][k] = mean_exposure[k]/intensity1[k]
-    
-  #   ratio[0][k] = 1
-  #   ratio[1][k] = intensity1[k]/intensity2[k]
-  #   # ratio[1][k] = mean_exposure[k]/intensity2[k]
-
-  # print(ratio[0][0],ratio[1][0],ratio[0][1],ratio[1][1],ratio[0][2],ratio[1][2])
-  # for img,index in zip([img1,img2],[0,1]):
-  #   for i in range(img.shape[0]):
-  #     for j in range(img.shape[1]):
-  #       for k in range(3):
-  #         img[i][j][k] = min(int(img[i][j][k]*ratio[index][k]),255)
-  print(2)
 def get_line(p1,p2):
   a = p2[1]-p1[1]
   b = p1[0]-p2[0]
@@ -80,77 +26,24 @@ def get_line(p1,p2):
 
   return (a/dist,b/dist,c/dist)
 
-def get_distance(pt,line):
-  return abs(line[0]*pt[0] + line[1]*pt[1] + line[2])
-
-def get_min_distance(pt,lineAr):
-  return min(get_distance(pt,line) for line in lineAr)
-
-def distance_from_edge(img,corners,mask):
-  # distance_matrix = np.ndarray([img.shape[0],img.shape[1]],dtype = np.float)
-  # def get_dist(i,j):
-  #   if mask[]
-  # for i in range(img.shape[0]):
-  #   for j in range(img.shape[1]):
-  #     if mask[i][j]:
-  #       distance_matrix[i][j] = get_min_distance([i,j],corners[1])
-  #     else:
-  #       distance_matrix[i][j] = 0
-  get_dist = lambda t: get_min_distance(t,corners[1])
-  distance_matrix = np.vectorize(get_dist)(img)
-  return distance_matrix
-
-def weighted_add(dist1,val1,dist2,val2):
-  return np.uint8((dist2*val1 + dist1*val2)/(dist1+dist2))
-
-def blending(img1,img2,dist_mat1,dist_mat2,mask1,mask2):
-  rows = img1.shape[0]
-  cols = img1.shape[1]
-  assert (rows == img2.shape[0] and cols == img2.shape[1])
-  dst_img = np.ndarray([rows,cols,3],ndtype = np.uint8)
-  dst_dist_mat = np.ndarray([img.shape[0],img.shape[1]],dtype = np.float)
-
-  for i in range(rows):
-    for j in range(cols):
-      if (mask1[i][j] and mask2[i][j]):
-        for k in range(3):
-          dst_img[i][j][k] = weighted_add(dist_mat1[i][j],img1[i][j][k],dist_mat2[i][j],img2[i][j][k])
-      elif (mask1[i][j]):
-        dst_img[i][j] = np.array(img1[i][j]) 
-      elif (mask2[i][j]):
-        dst_img[i][j] = np.array(img2[i][j])
-      else:
-        dst_img[i][j] = np.array([0,0,0],dtype=np.uint8)
-      dst_dist_mat[i][j] = min(dist_mat1[i][j],dist_mat)
-  dest_mask = mask1+mask2
-
-  return (dst_img,dest_mask)
-
 def get_mask(img,corners):
   mask = np.ndarray([img.shape[0],img.shape[1]],dtype = np.bool)
   p =  path.Path(corners[0])
   is_inside = lambda t: p.contain_points(t)
-  for i in img.shape[0]:
-    mask[i] = p.contain_points(img[i])
+  for i in range(img.shape[0]):
+    for j in range(img.shape[1]):
+      mask[i][j] = p.contains_points([(j,i)])[0]
+      # print(mask[i][j])
   return mask
   # if (p.contain_points(img))
 # def blending(img1,img2):
-def blend_2image(img1,img2,mask1,distmat1,H,w,h):
-  corners = get_lines(w,h,H)
-  mask2 = get_mask(img2,corners)
-  distmat2 = distance_from_edge(img2,corners,mask2)
-  dest_img,dest_mask,dest_distmat = blending(img1,img2,distmat1,distmat2,mask1,mask2)
-
-def laplacing_blending(img1,img2,mask1,H,w,h):
-  corners = get_lines(w,h,H)
-  mask2 = get_mask(img2,corners)
-
 def get_lines(width ,height, H):
-  four_points = np.ndarray(1,3)
+  four_points = [0,0,0,0]
+  print(H)
   four_points[0] = np.array([0,0,1])
-  four_points[1] = np.array([0,width-1,1])
-  four_points[2] = np.array([height-1,0,1])
-  four_points[3] = np.array([height-1,width-1,1])
+  four_points[1] = np.array([width-1,0,1])
+  four_points[2] = np.array([width-1,height-1,1])
+  four_points[3] = np.array([0,height-1,1])
   pt1 = None
   lines = []
   for i in range(4):
@@ -162,8 +55,92 @@ def get_lines(width ,height, H):
     four_points[i] = x
   x = four_points[0]
   lines.append(get_line(pt1,x))
+  print(four_points)
   return (four_points,lines)
    
+
+def laplacian_blending(img1,img2,mask1,H,w,h):
+  corners = get_lines(w,h,H)
+  mask2 = get_mask(img2,corners)
+  # plt.imshow(mask2)
+  # plt.show()
+  # print(mask2.shape)
+  dest = Laplacian_Pyramid_Blending_with_mask(img1,img2,mask1,mask2)
+  mask_dest = mask1+mask2
+  return dest,mask_dest
+
+def Laplacian_Pyramid_Blending_with_mask(A, B, m1,m2, num_levels = 6):
+    # assume mask is float32 [0,1]
+
+    # generate Gaussian pyramid for A,B and mask
+    GA = A.copy()
+    GB = B.copy()
+    GM = np.ndarray([m1.shape[0],m1.shape[1],3],dtype=np.float32)
+    GM2 = np.ndarray([m2.shape[0],m2.shape[1],3],dtype= np.float32)
+
+    for i in range(GM.shape[0]):
+      for j in range(GM.shape[1]):
+        GM[i][j] = np.array([m1[i][j],m1[i][j],m1[i][j]],dtype=np.float32)
+        GM2[i][j]= np.array([m2[i][j],m2[i][j],m2[i][j]],dtype=np.float32)
+    
+    for i in range(m2.shape[0]):
+      for j in range(m2.shape[1]):
+        for k in range(3):
+          GM2[i][j][k] = max(0,GM2[i][j][k]-GM[i][j][k])
+
+    gpA = [GA]
+    gpB = [GB]
+    gpM = [GM]
+    gpM2 = [GM2]
+    for i in range(num_levels):
+        GA = cv2.pyrDown(GA)
+        GB = cv2.pyrDown(GB)
+        GM = cv2.pyrDown(GM)
+        GM2 = cv2.pyrDown(GM2)
+        gpA.append(np.float32(GA))
+        gpB.append(np.float32(GB))
+        gpM.append(np.float32(GM))
+        gpM2.append(np.float32(GM2))
+
+    # generate Laplacian Pyramids for A,B and masks
+    lpA  = [gpA[num_levels-1]] # the bottom of the Lap-pyr holds the last (smallest) Gauss level
+    lpB  = [gpB[num_levels-1]]
+    gpM1r = [gpM[num_levels-1]]
+    gpM2r = [gpM2[num_levels-1]]
+
+    # gpM2 = [gpM2[num_levels-1]]
+    for i in range(num_levels-1,0,-1):
+        # Laplacian: subtarct upscaled version of lower level from current level
+        # to get the high frequencies
+        LA = np.subtract(gpA[i-1], cv2.pyrUp(gpA[i]))
+        LB = np.subtract(gpB[i-1], cv2.pyrUp(gpB[i]))
+        lpA.append(LA)
+        lpB.append(LB)  
+        gpM1r.append(gpM[i-1]) 
+        gpM2r.append(gpM2[i-1])
+        # gpMr.append(gpM[i-1]) # also reverse the masks
+
+    # Now blend images according to mask in each level
+    LS = []
+    for la,lb,gm,gm2 in zip(lpA,lpB,gpM1r,gpM2r):
+        ls = la * gm + lb * gm2
+        LS.append(ls)
+
+    # now reconstruct
+    ls_ = LS[0]
+    for i in range(1,num_levels):
+        ls_ = cv2.pyrUp(ls_)
+        ls_ = cv2.add(ls_, LS[i])
+
+    return ls_
+
+# if __name__ == '__main__':
+#     A = cv2.imread("input1.png",0)
+#     B = cv2.imread("input2.png",0)
+#     m = np.zeros_like(A, dtype='float32')
+#     m[:,A.shape[1]/2:] = 1 # make the mask half-and-half
+#     lpb = Laplacian_Pyramid_Blending_with_mask(A, B, m, 5)
+#     cv2.imwrite("lpb.png",lpb)
 
 img_ = cv2.imread('right.jpeg')
 ScaleFactor = 2
@@ -179,11 +156,7 @@ img2 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 sift = cv2.xfeatures2d.SIFT_create()
 # find the keypoints and descriptors with SIFT
-def get_keypoints(img1,img2):
-  kp1,des1 = sift.detectAndCompute(img1,None)
-  kp2,des2 = sift.detectAndCompute(img2,None)
-  bf = cv2.BFMatcher()
-  matches = bf.knnMatch(des1,des2, k=2)
+
   
 
 kp1, des1 = sift.detectAndCompute(img1,None)
@@ -223,17 +196,25 @@ if len(matches[:,0]) >= 4:
 else:
   raise AssertionError("Can't find enough keypoints.")
 # dst = cv2.warpAffine(img_,H,(img.shape[1] + img_.shape[1], img.shape[0]))
-dst = cv2.warpPerspective(img_,H,(img.shape[1] + img_.shape[1], img.shape[0]+img_.shape[0]))
+# dst = cv2.warpPerspective(img_,H,(img.shape[1] + img_.shape[1], img.shape[0]+img_.shape[0]))
+dst = cv2.warpPerspective(img_,H,(1024,1024))
 # plt.subplot(122),plt.imshow(dst),plt.title('Warped Image')
 # plt.show()
 # plt.figure()
+img_t1 = np.zeros_like(dst, dtype=np.uint8)
+mask1 = np.zeros([dst.shape[0],dst.shape[1]],dtype=np.uint8)
+img_t1[0:img.shape[0],0:img.shape[1]] = img
+mask1[0:img.shape[0],0:img.shape[1]] = 1
+print(mask1.shape, dst.shape, img_t1.shape)
+dst1,mkdst = laplacian_blending(img_t1,dst,mask1,H,img2.shape[1],img2.shape[0])
 
-img,dst = exposure_balancing(img,dst)
 
-dst[0:img.shape[0], 0:img.shape[1]] = img
-cv2.imwrite('output.jpg',dst)
+# dst[0:img.shape[0], 0:img.shape[1]] = img
+cv2.imwrite('output.jpg',dst1)
 plt.imshow(dst)
 plt.show()
+
+print(matches.shape)
 
 if __name__ == "__main__":
   ## Read all Images
