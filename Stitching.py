@@ -230,7 +230,7 @@ if __name__ == "__main__":
     if featureMatchMatrixSum[Root] > 0.25*maxCount:
       print("\nTaken Image {0} as the Base Image".format(Root))
     else:
-      print("\nImage {0} Rejected as Base Image".format(Root))
+      print("\n {0} Rejected as Base Image".format(Root))
       continue
 
     ## ============ Lists / Sets Initialization ============== ##
