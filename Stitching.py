@@ -7,6 +7,10 @@ import os
 indicexMax = lambda x: np.unravel_index(np.argmax(x),x.shape)
 IntArray = lambda y: np.vectorize(lambda x: int(x))(y)
 
+def getMask(s):
+  sGrey = cv2.cvtColor(s, cv2.COLOR_BGR2GRAY)
+  ret, KeypointMask = cv2.threshold(sGrey, 1, 255, cv2.THRESH_BINARY)
+  return KeypointMask
 
 def showTestImage(image):
   cv2.imshow('test',image)
@@ -112,9 +116,9 @@ def getFeatureMatchMatrix(desList,kpList):
       if i==j:
         homographyArray.append(np.identity(3))
         continue
-      matchCount, matches = getMatches(desList[i],desList[j])
+      matchCount, matches = getMatches(desList[j],desList[i])
       if matchCount >= 4:
-        H,_ = getHomographyFromMatched(matches,kpList[i],kpList[j])
+        H,_ = getHomographyFromMatched(matches,kpList[j],kpList[i])
         matchMatrix[i][j] = matchCount
         homographyArray.append(H)
       else:
@@ -123,10 +127,24 @@ def getFeatureMatchMatrix(desList,kpList):
   matchMatrix = (matchMatrix+matchMatrix.T)/2
   return IntArray(matchMatrix) ,np.array(homographyMatrix)
 
+def ContructFinalImage(HomographyArray,imgList,Height,Width):
+  N_Images = len(imgList)
+  dst = np.zeros(shape=[Height, Width , 3], dtype=np.uint8)
+  for k in range(N_Images):
+    img = imgList[k]
+    H = HomographyArray[k]
+    s = cv2.warpPerspective(img,H, (Width,Height))
+    mask = getMask(dst)
+    s[np.where(mask==255)] = dst[np.where(mask==255)]
+    dst = s
+  return dst
+
+
 if __name__ == "__main__":
   ## Settings
   directory = './1'
-  imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
+  # imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
+  imagelist = ['2.jpg','3.jpg','4.jpg']
   N_Images = len(imagelist)
   ScaleFactor = 8
 
@@ -135,8 +153,10 @@ if __name__ == "__main__":
   sift = cv2.xfeatures2d.SIFT_create()
   bf = cv2.BFMatcher()
 
+  ## ===================================================================================================================
   ## Read all Images in An Array
   ## find the keypoints and descriptors with SIFT and Add to List
+  ## ===================================================================================================================
   print("Reading all Images from the Directory {0}".format(directory))
   for image in imagelist: 
     print("Reading Image "+image) 
@@ -153,39 +173,87 @@ if __name__ == "__main__":
 
   assert len(imgListCV) == len(kpList) == len(desList) == N_Images
 
+  ## ===================================================================================================================
+  ## Compute Feature Martrix and MAtrix of Homographies
+  ## ===================================================================================================================
   featureMatchMatrix,homographyMatrix = getFeatureMatchMatrix(desList,kpList)
   featureMatrixRootSort = featureMatchMatrix.sum(axis=0)
-  print(featureMatchMatrix,featureMatrixRootSort)
-  # print(homographyMatrix)
+  # print(featureMatchMatrix,featureMatrixRootSort,homographyMatrix)
 
-  for i in range(N_Images):
+
+  ## ===================================================================================================================
+  ## Loop Over Each Image as the Base
+  ## ===================================================================================================================
+  
+  for i in range(1,2):
     Root = i
-    CoordinatesCombined = getImageCoordinates(imgListCV(Root))
+    CoordinatesCombined = getImageCoordinates(imgListCV[Root],mode='2D')
     HomographyArray = homographyMatrix[i]
-    
+    print(HomographyArray, CoordinatesCombined)
+
     ImageSet = np.arange(0,N_Images).tolist()
     ImageTaken = []
 
     TransferImage(i,ImageSet,ImageTaken)
     assert len(ImageSet)+len(ImageTaken)==N_Images
-    
+
     while len(ImageSet) != 0:
+      print(ImageSet,ImageTaken)
       rowIdx = np.array(ImageTaken)
       colIdx = np.array(ImageSet)
-      featureMatchMatrixRound = featureMatchMatrix[rowIdx,colIdx]
-      
+      print(rowIdx,colIdx)
+      featureMatchMatrixRound = featureMatchMatrix[rowIdx[:,None],colIdx]
+      print(rowIdx,colIdx,featureMatchMatrixRound)
 
-      ## Take One iamge from Image Set 
+      ## Take One iamge from Image Set
+      try:
+        r,c = indicexMax(featureMatchMatrixRound)
+        print("Feature Points",featureMatchMatrixRound[r][c])
+      except:
+        r,c = 0,indicexMax(featureMatchMatrixRound)[0]
+        print("Feature Points",featureMatchMatrixRound[c])
+      print(r,c)
+      parentNode = rowIdx[r]
+      NodeSelected = colIdx[c]
+
+      print("Parent Image {0}".format(parentNode))
+      print("Selected Image {0}".format(NodeSelected))
+
       ## Compute Homogrpahy And Save
-      ## Estimate size
-      ## append coordinates
+      Hparent = HomographyArray[parentNode]
+      H = homographyMatrix[parentNode][NodeSelected]
+      HomographyArray[NodeSelected] = Hparent.dot(H)
+
+      assert HomographyArray[NodeSelected].shape == (3,3)
+      print(Hparent, H, HomographyArray[NodeSelected])
+      
+      ## Estimate Coordinates
+      warpedCoordinates = getWarpedImageCoordinates(imgListCV[NodeSelected], HomographyArray[NodeSelected])
+      print(CoordinatesCombined,warpedCoordinates)
+      CoordinatesCombined = np.concatenate((CoordinatesCombined,warpedCoordinates),axis=0)
+      
+      ## Transfer Image to Another Set
+      TransferImage(NodeSelected,ImageSet,ImageTaken)
+      assert len(ImageSet) + len(ImageTaken) == N_Images
+
+      ## Compute Sequencial Homography
+
+    ## Estimation of Final Size
+    minX,minY,Width,Height =  getFinalDimension(CoordinatesCombined)
+    Area = Width*Height
+    print(Width,Height,Area)
+
+    ## Check Offset    
+    RT = np.array([
+      [1, 0, -minX],
+      [0, 1, -minY],
+      [0, 0, 1]
+    ])
     
+    HomographyArray = [RT.dot(H) for H in HomographyArray]
+    dst = ContructFinalImage(HomographyArray,imgListCV,Height,Width)    
+    cv2.imwrite('outputStitching.jpg'.format(i),dst)
 
-    
-
-
-  ## Construct a Tree Using featureMatrix
-  
   # while len(imgListCV)>1:
   #   N = len(imgListCV)
   #   matchMatrix = np.zeros((N,N))
@@ -236,6 +304,4 @@ if __name__ == "__main__":
   #   desList.append(des)
 
   #   assert len(imgListCV) == len(kpList) == len(desList) == N-1
-  #   print("New Image Added at Position "+str(N-2))
-    
-        
+  #   print("New Image Added at Position "+str(N-2)) 
