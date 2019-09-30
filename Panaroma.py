@@ -156,7 +156,42 @@ def combine(img1,H1,img2,H2,w,h,mask1,poly):
     img2_metric = calculate_image_metric(w,h,quad)
     dst = blend(img_1,mask1_new,img1_metric,img_2,mask2,img2_metric)
     return (dst,mask_new,poly_new)
+
+def stitch_image(dst,img2,mask1_new,mask2):
+  for i in range(dst.shape[0]):
+    for j in range(dst.shape[1]):
+      if (not mask1_new[i][j] and mask2[i][j]):
+        dst[i][j] = img2[i][j].copy()
+      
+
+def combine2(img1,H1,img2,H2,w,h,mask1,poly):
+    print(w,h)
+    img_1 = cv2.warpPerspective(img1,H1,(w,h))
+    plt.imshow(img_1)
+    plt.show()
+    
+    img_2 = cv2.warpPerspective(img2,H2,(w,h))
+    plt.imshow(img_2)
+    plt.show()
+    print(img_1.shape,img_2.shape)
+    tx = int(H1[0][2])
+    ty = int(H1[1][2])
+    print(tx,ty)
+    mask1_new = get_new_mask(mask1,tx,ty,h,w)
+    quad = get_quad(img2.shape[1],img2.shape[0],H2)
+    mask2 = get_mask(w,h,quad)
+    mask_new = mask1_new + mask2
+    poly1_new = shift_poly(poly,tx,ty)
+    poly_new = poly1_new.union(quad)
+    # img1_metric = calculate_image_metric(w,h,poly1_new)
+    # img2_metric = calculate_image_metric(w,h,quad)
+    dst = np.array(img_1)
+    stitch_image(dst,img_2,mask1_new,mask2)
+    dst = Laplacian_Pyramid_Blending_with_mask(dst,dst,mask1_new,mask2)
+    # dst = blend(img_1,mask1_new,img1_metric,img_2,mask2,img2_metric)
+    return (dst,mask_new,poly_new)
   
+
 def panaroma(imglist,Hpairs,wh):
     img1 = imglist[0]
     mask1 = np.ones([img1.shape[0],img1.shape[1]],dtype=np.bool)
@@ -169,7 +204,9 @@ def panaroma(imglist,Hpairs,wh):
       img1,mask1,poly1 = combine(img1,H1,img2,H2,w,h,mask1,poly1)
     print(img1.shape)
     return img1
-    
+
+
+     
 # def get_mask(img,corners):
 #   mask = np.ndarray([img.shape[0],img.shape[1]],dtype = np.bool)
 #   p =  path.Path(corners[0])
@@ -353,10 +390,16 @@ else:
 # dst1,mkdst = laplacian_blending(img_t1,dst,mask1,H,img2.shape[1],img2.shape[0])
 img1 = img
 img2 = img_
-H1 = np.array([[1,0,0],[0,1,0],[0,0,1]],dtype=np.float32)
-H2 = H
-w = img1.shape[1] + img2.shape[1]
-h = img1.shape[0] + img2.shape[0]
+I = np.array([[1,0,0],[0,1,0],[0,0,1]],dtype=np.float32)
+
+T = np.array([[0,0,0],[0,0,0],[0,0,0]],dtype=np.float32)
+
+H1  = I + T
+H2  = H + T
+# w = 1024
+# h = 1024
+w = int(((img1.shape[1] + img2.shape[1])))
+h = int(((img1.shape[0] + img2.shape[0])))
 imgs = [img1,img2]
 wh = [(w,h)]
 HS = [(H1,H2)]
