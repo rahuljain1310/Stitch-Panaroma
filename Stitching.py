@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
 import os
+import math
 
 indicexMax = lambda x: np.unravel_index(np.argmax(x),x.shape)
 IntArray = lambda y: np.vectorize(lambda x: int(x))(y)
@@ -128,7 +129,7 @@ def getFeatureMatchMatrix(desList,kpList):
   matchMatrix = (matchMatrix+matchMatrix.T)/2
   return IntArray(matchMatrix) ,np.array(homographyMatrix)
 
-def ContructFinalImage(CoordinatesCombined,HomographyArray,imgList,Height,Width):
+def ContructFinalImage(CoordinatesCombined,HomographyArray,imgList):
   minX,minY,Width,Height,Area =  getFinalDimension(CoordinatesCombined)
   print("Constructing Image From Coordiantes & Homographies ......")
   print("Width: {0}, Height: {1}, Area: {2}".format(Width,Height,Area))
@@ -153,9 +154,19 @@ def get2Dindices(matrix):
     r,c = 0,indicexMax(matrix)[0]
     return r,c
 
+def ConstructAlphaBlending(CoordinatesCombined,HomographyArray,imgList):
+  _,_,Width,Height,_ = getFinalDimension(CoordinatesCombined)
+  mask = np.zeros(shape=[Height, Width], dtype=np.uint8)
+  for k in range(N_Images):
+    s = cv2.warpPerspective(imgList[k], HomographyArray[k], (Width,Height))
+    mask += 5*getMask(s)
+  cv2.imshow('fr',mask)
+  cv2.waitKey(4000)
+
 if __name__ == "__main__":
   ## Settings
-  directory = './1'
+  x = input()
+  directory = './'+x
   imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
   # imagelist = ['2.jpg','3.jpg','4.jpg']
   N_Images = len(imagelist)
@@ -193,12 +204,16 @@ if __name__ == "__main__":
   featureMatrixRootSort = featureMatchMatrix.sum(axis=0)
   # print(featureMatchMatrix,featureMatrixRootSort,homographyMatrix)
 
-
   ## ===================================================================================================================
   ## Loop Over Each Image as the Base
   ## ===================================================================================================================
   
-  for Root in range(1,2):
+  MinArea = math.inf
+  FinalComputationList = None
+  HomographyArrayFinal = None
+  CoordinatesCombinedFinal = None
+
+  for Root in range(0,N_Images):
     print("Taken Image {0} as the Base Image".format(Root))
 
     ## Consider All The Sets
@@ -258,8 +273,19 @@ if __name__ == "__main__":
       ComputationList.append(t)
 
     ## Estimation of Final Size
-    dst = ContructFinalImage(CoordinatesCombined,HomographyArray,imgListCV,Height,Width)    
+    minX,minY,Width,Height,Area = getFinalDimension(CoordinatesCombined)
+    dst = ContructFinalImage(CoordinatesCombined,HomographyArray,imgListCV)
     cv2.imwrite('outputStitching{0}.jpg'.format(Root),dst)
+    if Area<MinArea:
+      MinArea = Area
+      FinalComputationList = ComputationList
+      CoordinatesCombinedFinal = CoordinatesCombined
+      HomographyArrayFinal = HomographyArray
+    
+  dst = ContructFinalImage(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
+  cv2.imwrite('outputStitchingFinal.jpg',dst)
+  ConstructAlphaBlending(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
+
 
   # while len(imgListCV)>1:
   #   N = len(imgListCV)
