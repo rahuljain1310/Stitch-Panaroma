@@ -209,9 +209,11 @@ if __name__ == "__main__":
   ## ===================================================================================================================
   
   MinArea = math.inf
-  FinalComputationList = None
   HomographyArrayFinal = None
   CoordinatesCombinedFinal = None
+  ImageListFinal = None
+  HomographyListFinal = None
+  DimensionListFinal = None
 
   for Root in range(0,N_Images):
     print("Taken Image {0} as the Base Image".format(Root))
@@ -227,7 +229,8 @@ if __name__ == "__main__":
     assert len(ImageSet)+len(ImageTaken)==N_Images
 
     RTIntial = np.identity(3)
-    ComputationList = []
+    HomographyList = []
+    DimensionList = []
     Area = imgListCV[Root].shape[0]*imgListCV[Root].shape[0]
 
     while len(ImageSet) != 0:
@@ -267,10 +270,11 @@ if __name__ == "__main__":
       HBase = RTBase.dot(HomographyArray[Root])
       HWarp = RTNew.dot(HomographyArray[NodeSelected])
 
-      t = (Width,Height,HBase,HWarp)
+      t = [Width,Height,HBase,HWarp]
       assert Area <= AreaNew
       Area = AreaNew
-      ComputationList.append(t)
+      DimensionList.append((Width,Height))
+      HomographyList.append((HBase,HWarp))
 
     ## Estimation of Final Size
     minX,minY,Width,Height,Area = getFinalDimension(CoordinatesCombined)
@@ -278,13 +282,19 @@ if __name__ == "__main__":
     cv2.imwrite('outputStitching{0}.jpg'.format(Root),dst)
     if Area<MinArea:
       MinArea = Area
-      FinalComputationList = ComputationList
+      HomographyListFinal = HomographyList
+      DimensionListFinal = DimensionList
       CoordinatesCombinedFinal = CoordinatesCombined
       HomographyArrayFinal = HomographyArray
-    
+      ImageListFinal = np.array(imgListCV)[np.array(ImageTaken)]
+
   dst = ContructFinalImage(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
   cv2.imwrite('outputStitchingFinal.jpg',dst)
-  ConstructAlphaBlending(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
+  # ConstructAlphaBlending(CoordinatesCombinedFinal,HomographyArrayFinal,imgListCV)
+
+  ## For Blending
+  
+
 
 
   # while len(imgListCV)>1:
