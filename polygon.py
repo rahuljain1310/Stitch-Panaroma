@@ -50,7 +50,27 @@ def caculate_image_metric(w,h,poly):
             image_metrics[j][i] = find_metric(Point(i,j),poly,dists)
     return image_metrics
 
+def get_mask(w,h,quad):
+  mask = np.ndarray([h,w],dtype = np.bool)
+  for i in range(w):
+    for j in range(h):
+      mask[j][i] = quad.contains(Point(i,j))
+  return mask
 
+def get_quad(w,h,H):
+  four_points = [0,0,0,0]
+  four_points[0] = np.array([0,0,1])
+  four_points[1] = np.array([width-1,0,1])
+  four_points[2] = np.array([width-1,height-1,1])
+  four_points[3] = np.array([0,height-1,1])
+  for i in range(4):
+    x =  np.matmul(H,four_points[i])
+    x = np.array([x[0]/x[2],x[1]/x[2]],dtype= np.float32)
+    four_points[i] = x
+  return Polygon(four_points)
+
+# def get_new_poly(poly,quad):
+#     poly.union(quad)
 
 def intersect_poly_quad(poly, quad):
     shapely_poly = Polygon(poly)
