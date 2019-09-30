@@ -10,6 +10,7 @@ from shapely.geometry import Polygon,LineString,Point
 indicexMax = lambda x: np.unravel_index(np.argmax(x),x.shape)
 IntArray = lambda y: np.vectorize(lambda x: int(x))(y)
 constructRT = lambda minX, minY : np.array([[1, 0, -minX],[0, 1, -minY],[0, 0, 1]])
+
 def find_metric(point,poly,dists):
     p = Point(point)
     poly_coords = poly.exterior.coords
@@ -204,15 +205,6 @@ def getHomographyFromMatched(matches,kp1,kp2):
     H, masked = cv2.findHomography(src, dst, cv2.RANSAC, 5.0)
   return H,masked
 
-def getAffinefromMatched(matches,kp1,kp2):
-  if len(matches[:,0]) >= 4:
-    src = np.float32([ kp1[m.queryIdx].pt for m in matches[:,0] ]).reshape(-1,1,2)
-    dst = np.float32([ kp2[m.trainIdx].pt for m in matches[:,0] ]).reshape(-1,1,2)
-    a, inliers = cv2.estimateAffinePartial2D(src,dst, cv2.RANSAC)
-    a = np.concatenate((a,np.array([[0,0,1]])))
-    # H, masked = cv2.findHomography(src, dst, cv2.RANSAC, 5.0)
-  return a,None
-
 def getFinalDimension(CoordinatesCombined):
   minX,minY = CoordinatesCombined.min(axis=0)
   maxX,maxY = CoordinatesCombined.max(axis=0)
@@ -261,7 +253,7 @@ def mergeImage(img1,img2,ds1,ds2,kp1,kp2):
     print("Cannot Find enough Keypoints.")
     return None
   
-def getFeatureMatchAndProjectionMatrix(desList,kpList,mode='h'):
+def getFeatureMatchMatrix(desList,kpList):
   N = len(desList)
   matchMatrix = np.zeros((N,N))
   homographyMatrix = []
@@ -273,10 +265,7 @@ def getFeatureMatchAndProjectionMatrix(desList,kpList,mode='h'):
         continue
       matchCount, matches = getMatches(desList[j],desList[i])
       if matchCount >= 4:
-        if mode == 'a':
-          H,_ = getAffinefromMatched(matches,kpList[j],kpList[i])
-        else:
-          H,_ = getHomographyFromMatched(matches,kpList[j],kpList[i])
+        H,_ = getHomographyFromMatched(matches,kpList[j],kpList[i])
         matchMatrix[i][j] = matchCount
         homographyArray.append(H)
       else:
@@ -310,20 +299,25 @@ def get2Dindices(matrix):
     r,c = 0,indicexMax(matrix)[0]
     return r,c
 
+def ConstructAlphaBlending(CoordinatesCombined,HomographyArray,imgList):
+  _,_,Width,Height,_ = getFinalDimension(CoordinatesCombined)
+  mask = np.zeros(shape=[Height, Width], dtype=np.uint8)
+  for k in range(N_Images):
+    s = cv2.warpPerspective(imgList[k], HomographyArray[k], (Width,Height))
+    mask += 5*getMask(s)
+  cv2.imshow('fr',mask)
+  cv2.waitKey(4000)
 
 if __name__ == "__main__":
-  ## ============ Settings ============ ##
-  print("Enter the diretory of images..")
-  d = input()
-  print("Enter the Perspective Homography/Affine")
-  mod = input()
-  directory = './'+d
+  ## Settings
+  x = input()
+  directory = './'+x
   imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
+  # imagelist = ['2.jpg','3.jpg','4.jpg']
   N_Images = len(imagelist)
   ScaleFactor = 8
 
-  ## ======== Initializing Lists and Functions ======= ##
-  
+  ## Initializing Lists and Functions
   imgListCV, kpList, desList = [],[],[]
   sift = cv2.xfeatures2d.SIFT_create()
   bf = cv2.BFMatcher()
@@ -332,7 +326,6 @@ if __name__ == "__main__":
   ## Read all Images in An Array
   ## find the keypoints and descriptors with SIFT and Add to List
   ## ===================================================================================================================
-  
   print("Reading all Images from the Directory {0}".format(directory))
   for image in imagelist: 
     print("Reading Image "+image) 
@@ -350,11 +343,11 @@ if __name__ == "__main__":
   assert len(imgListCV) == len(kpList) == len(desList) == N_Images
 
   ## ===================================================================================================================
-  ## Compute Feature Martrix and MAtrix of Homographies/ Affines
+  ## Compute Feature Martrix and MAtrix of Homographies
   ## ===================================================================================================================
-  featureMatchMatrix,homographyMatrix = getFeatureMatchAndProjectionMatrix(desList,kpList,mode=mod)
-  featureMatchMatrixSum = featureMatchMatrix.sum(axis=0)
-  maxCount = featureMatchMatrixSum.max() 
+  featureMatchMatrix,homographyMatrix = getFeatureMatchMatrix(desList,kpList)
+  featureMatrixRootSort = featureMatchMatrix.sum(axis=0)
+  # print(featureMatchMatrix,featureMatrixRootSort,homographyMatrix)
 
   ## ===================================================================================================================
   ## Loop Over Each Image as the Base
@@ -367,59 +360,53 @@ if __name__ == "__main__":
   HomographyListFinal = None
   DimensionListFinal = None
 
-  ## ===================================================================================================================
-  ## Homography And Affine Projection
-  ## ===================================================================================================================
   for Root in range(0,N_Images):
-    if featureMatchMatrixSum[Root] > 0.25*maxCount:
-      print("\nTaken Image {0} as the Base Image".format(Root))
-    else:
-      print("\n {0} Rejected as Base Image".format(Root))
-      continue
+    print("Taken Image {0} as the Base Image".format(Root))
 
-    ## ============ Lists / Sets Initialization ============== ##
+    ## Consider All The Sets
     CoordinatesCombined = getImageCoordinates(imgListCV[Root],mode='2D')
     HomographyArray = homographyMatrix[Root]
     ImageSet = np.arange(0,N_Images).tolist()
     ImageTaken = []
-    HomographyList = []
-    DimensionList = []
-    RTIntial = np.identity(3)
-    Area = imgListCV[Root].shape[0]*imgListCV[Root].shape[0]
+    # print(HomographyArray, CoordinatesCombined)
 
-    ## ============ Picking Images from Set One-One ============ ##
     TransferImage(Root,ImageSet,ImageTaken)
     assert len(ImageSet)+len(ImageTaken)==N_Images
-   
+
+    RTIntial = np.identity(3)
+    HomographyList = []
+    DimensionList = []
+    Area = imgListCV[Root].shape[0]*imgListCV[Root].shape[0]
+
     while len(ImageSet) != 0:
       rowIdx = np.array(ImageTaken)
       colIdx = np.array(ImageSet)
       featureMatchMatrixRound = featureMatchMatrix[rowIdx[:,None],colIdx]
       # print(ImageTaken, ImageSet, rowIdx,colIdx,featureMatchMatrixRound)
 
-      ## ========== Take One iamge from Image Set ========== ##
+      ## Take One iamge from Image Set 
       r,c = get2Dindices(featureMatchMatrixRound)
       parentNode = rowIdx[r]
       NodeSelected = colIdx[c]
       print("Parent Image: {0}, Selected Image {1}".format(parentNode,NodeSelected))
 
-      ## ========== Compute Homogrpahy And Save ========== ##
+      ## Compute Homogrpahy And Save
       Hparent = HomographyArray[parentNode]
       H = homographyMatrix[parentNode][NodeSelected]
       HomographyArray[NodeSelected] = Hparent.dot(H)
       assert HomographyArray[NodeSelected].shape == (3,3)
       # print(Hparent, H, HomographyArray[NodeSelected])
 
-      ## ========== Estimate Coordinates ========== ##
+      ## Estimate Coordinates
       warpedCoordinates = getWarpedImageCoordinates(imgListCV[NodeSelected], HomographyArray[NodeSelected])
       CoordinatesCombined = np.concatenate((CoordinatesCombined,warpedCoordinates),axis=0)
       # print(CoordinatesCombined,warpedCoordinates)
       
-      ## ========== Transfer Image to Another Set ========== ##
+      ## Transfer Image to Another Set
       TransferImage(NodeSelected,ImageSet,ImageTaken)
       assert len(ImageSet) + len(ImageTaken) == N_Images
 
-      ## ========== Compute Sequencial Homography ========== ##
+      ## Compute Sequencial Homography
       minX,minY,Width,Height,AreaNew = getFinalDimension(CoordinatesCombined)
       RTNew = constructRT(minX,minY)
       RTInitalInv = np.linalg.inv(RTIntial)
@@ -427,12 +414,15 @@ if __name__ == "__main__":
       RTIntial = RTNew
       HBase = RTBase.dot(HomographyArray[Root])
       HWarp = RTNew.dot(HomographyArray[NodeSelected])
-      DimensionList.append((Width,Height))
-      HomographyList.append((HBase,HWarp))
+
+      t = [Width,Height,HBase,HWarp]
       assert Area <= AreaNew
       Area = AreaNew
+      DimensionList.append((Width,Height))
+      HomographyList.append((HBase,HWarp))
 
-    ## ========== Comaprison for Best Fit of Base Image ========== ##
+
+    ## Estimation of Final Size
     minX,minY,Width,Height,Area = getFinalDimension(CoordinatesCombined)
     # dst = ContructFinalImage(CoordinatesCombined,HomographyArray,imgListCV)
     # cv2.imwrite('outputStitching{0}.jpg'.format(Root),dst)
