@@ -6,6 +6,7 @@ import os
 
 indicexMax = lambda x: np.unravel_index(np.argmax(x),x.shape)
 IntArray = lambda y: np.vectorize(lambda x: int(x))(y)
+constructRT = lambda minX, minY : np.array([[1, 0, -minX],[0, 1, -minY],[0, 0, 1]])
 
 def getMask(s):
   sGrey = cv2.cvtColor(s, cv2.COLOR_BGR2GRAY)
@@ -63,7 +64,7 @@ def getFinalDimension(CoordinatesCombined):
   maxX,maxY = CoordinatesCombined.max(axis=0)
   Width = maxX-minX
   Height = maxY-minY
-  return minX,minY,Width,Height
+  return minX,minY,Width,Height,Height*Width
 
 def mergeImage(img1,img2,ds1,ds2,kp1,kp2):
   _,matches = getMatches(ds1,ds2)
@@ -86,7 +87,7 @@ def mergeImage(img1,img2,ds1,ds2,kp1,kp2):
     Width = maxX-minX
     Height = maxY-minY
     # print(Width,Height)
-    # minX,minY,Width,Height = getFinalDimension(CoordinatesCombined)
+    # minX,minY,Width,Height,Area = getFinalDimension(CoordinatesCombined)
 
     RT = np.array([
       [1, 0, -minX],
@@ -127,7 +128,12 @@ def getFeatureMatchMatrix(desList,kpList):
   matchMatrix = (matchMatrix+matchMatrix.T)/2
   return IntArray(matchMatrix) ,np.array(homographyMatrix)
 
-def ContructFinalImage(HomographyArray,imgList,Height,Width):
+def ContructFinalImage(CoordinatesCombined,HomographyArray,imgList,Height,Width):
+  minX,minY,Width,Height,Area =  getFinalDimension(CoordinatesCombined)
+  print("Constructing Image From Coordiantes & Homographies ......")
+  print("Width: {0}, Height: {1}, Area: {2}".format(Width,Height,Area))
+  RT = constructRT(minX,minY)
+  HomographyArray = [RT.dot(H) for H in HomographyArray]
   N_Images = len(imgList)
   dst = np.zeros(shape=[Height, Width , 3], dtype=np.uint8)
   for k in range(N_Images):
@@ -139,12 +145,19 @@ def ContructFinalImage(HomographyArray,imgList,Height,Width):
     dst = s
   return dst
 
+def get2Dindices(matrix):
+  try:
+    r,c = indicexMax(matrix)
+    return r,c
+  except:
+    r,c = 0,indicexMax(matrix)[0]
+    return r,c
 
 if __name__ == "__main__":
   ## Settings
   directory = './1'
-  # imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
-  imagelist = ['2.jpg','3.jpg','4.jpg']
+  imagelist = [f for f in os.listdir(directory) if f.endswith('.jpg')]
+  # imagelist = ['2.jpg','3.jpg','4.jpg']
   N_Images = len(imagelist)
   ScaleFactor = 8
 
@@ -185,74 +198,68 @@ if __name__ == "__main__":
   ## Loop Over Each Image as the Base
   ## ===================================================================================================================
   
-  for i in range(1,2):
-    Root = i
-    CoordinatesCombined = getImageCoordinates(imgListCV[Root],mode='2D')
-    HomographyArray = homographyMatrix[i]
-    print(HomographyArray, CoordinatesCombined)
+  for Root in range(1,2):
+    print("Taken Image {0} as the Base Image".format(Root))
 
+    ## Consider All The Sets
+    CoordinatesCombined = getImageCoordinates(imgListCV[Root],mode='2D')
+    HomographyArray = homographyMatrix[Root]
     ImageSet = np.arange(0,N_Images).tolist()
     ImageTaken = []
+    # print(HomographyArray, CoordinatesCombined)
 
-    TransferImage(i,ImageSet,ImageTaken)
+    TransferImage(Root,ImageSet,ImageTaken)
     assert len(ImageSet)+len(ImageTaken)==N_Images
 
+    RTIntial = np.identity(3)
+    ComputationList = []
+    Area = imgListCV[Root].shape[0]*imgListCV[Root].shape[0]
+
     while len(ImageSet) != 0:
-      print(ImageSet,ImageTaken)
       rowIdx = np.array(ImageTaken)
       colIdx = np.array(ImageSet)
-      print(rowIdx,colIdx)
       featureMatchMatrixRound = featureMatchMatrix[rowIdx[:,None],colIdx]
-      print(rowIdx,colIdx,featureMatchMatrixRound)
+      # print(ImageTaken, ImageSet, rowIdx,colIdx,featureMatchMatrixRound)
 
-      ## Take One iamge from Image Set
-      try:
-        r,c = indicexMax(featureMatchMatrixRound)
-        print("Feature Points",featureMatchMatrixRound[r][c])
-      except:
-        r,c = 0,indicexMax(featureMatchMatrixRound)[0]
-        print("Feature Points",featureMatchMatrixRound[c])
-      print(r,c)
+      ## Take One iamge from Image Set 
+      r,c = get2Dindices(featureMatchMatrixRound)
       parentNode = rowIdx[r]
       NodeSelected = colIdx[c]
-
-      print("Parent Image {0}".format(parentNode))
-      print("Selected Image {0}".format(NodeSelected))
+      print("Parent Image: {0}, Selected Image {1}".format(parentNode,NodeSelected))
 
       ## Compute Homogrpahy And Save
       Hparent = HomographyArray[parentNode]
       H = homographyMatrix[parentNode][NodeSelected]
       HomographyArray[NodeSelected] = Hparent.dot(H)
-
       assert HomographyArray[NodeSelected].shape == (3,3)
-      print(Hparent, H, HomographyArray[NodeSelected])
-      
+      # print(Hparent, H, HomographyArray[NodeSelected])
+
       ## Estimate Coordinates
       warpedCoordinates = getWarpedImageCoordinates(imgListCV[NodeSelected], HomographyArray[NodeSelected])
-      print(CoordinatesCombined,warpedCoordinates)
       CoordinatesCombined = np.concatenate((CoordinatesCombined,warpedCoordinates),axis=0)
+      # print(CoordinatesCombined,warpedCoordinates)
       
       ## Transfer Image to Another Set
       TransferImage(NodeSelected,ImageSet,ImageTaken)
       assert len(ImageSet) + len(ImageTaken) == N_Images
 
       ## Compute Sequencial Homography
+      minX,minY,Width,Height,AreaNew = getFinalDimension(CoordinatesCombined)
+      RTNew = constructRT(minX,minY)
+      RTInitalInv = np.linalg.inv(RTIntial)
+      RTBase = RTNew.dot(RTInitalInv)
+      RTIntial = RTNew
+      HBase = RTBase.dot(HomographyArray[Root])
+      HWarp = RTNew.dot(HomographyArray[NodeSelected])
+
+      t = (Width,Height,HBase,HWarp)
+      assert Area <= AreaNew
+      Area = AreaNew
+      ComputationList.append(t)
 
     ## Estimation of Final Size
-    minX,minY,Width,Height =  getFinalDimension(CoordinatesCombined)
-    Area = Width*Height
-    print(Width,Height,Area)
-
-    ## Check Offset    
-    RT = np.array([
-      [1, 0, -minX],
-      [0, 1, -minY],
-      [0, 0, 1]
-    ])
-    
-    HomographyArray = [RT.dot(H) for H in HomographyArray]
-    dst = ContructFinalImage(HomographyArray,imgListCV,Height,Width)    
-    cv2.imwrite('outputStitching.jpg'.format(i),dst)
+    dst = ContructFinalImage(CoordinatesCombined,HomographyArray,imgListCV,Height,Width)    
+    cv2.imwrite('outputStitching{0}.jpg'.format(Root),dst)
 
   # while len(imgListCV)>1:
   #   N = len(imgListCV)
